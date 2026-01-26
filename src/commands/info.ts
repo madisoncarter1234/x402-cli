@@ -4,11 +4,17 @@ import ora from 'ora';
 
 interface InfoOptions {
   verbose?: boolean;
+  json?: boolean;
 }
 
 export async function getEndpointInfo(url: string, options: InfoOptions) {
+  if (options.json) {
+    logger.setJsonMode(true);
+  }
+
   logger.header('x402 Endpoint Information');
   logger.info(`URL: ${url}`);
+  logger.setJsonData('url', url);
 
   const spinner = ora('Fetching payment requirements').start();
 
@@ -20,6 +26,8 @@ export async function getEndpointInfo(url: string, options: InfoOptions) {
     if (response.status === 200) {
       spinner.succeed('Endpoint is publicly accessible (no payment required)');
       logger.success('This endpoint does not require payment');
+      logger.setJsonData('paymentRequired', false);
+      if (options.json) logger.outputJson();
       return;
     }
 
@@ -50,9 +58,13 @@ export async function getEndpointInfo(url: string, options: InfoOptions) {
       logger.info('x402 Version: 1 (body-based)');
     }
 
+    logger.setJsonData('paymentRequired', true);
+    logger.setJsonData('paymentData', paymentData);
+
     if (options.verbose) {
       logger.header('Full Payment Requirements');
       logger.json(paymentData);
+      if (options.json) logger.outputJson();
       return;
     }
 
@@ -116,6 +128,8 @@ export async function getEndpointInfo(url: string, options: InfoOptions) {
 
     logger.info('Use --verbose flag to see full JSON');
 
+    if (options.json) logger.outputJson();
+
   } catch (error: any) {
     spinner.fail('Request failed');
     logger.error(error.message);
@@ -130,6 +144,7 @@ export async function getEndpointInfo(url: string, options: InfoOptions) {
       logger.json(error.response.data);
     }
 
+    if (options.json) logger.outputJson();
     process.exit(1);
   }
 }

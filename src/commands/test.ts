@@ -1,30 +1,28 @@
 import axios from 'axios';
 import { logger } from '../utils/logger.js';
-import { getPrivateKey } from '../utils/config.js';
+import { getPrivateKey, getNetwork, NETWORK_CHAIN_IDS } from '../utils/config.js';
+import { saveReceipt, type PaymentReceipt } from './receipt.js';
 import ora from 'ora';
 import { privateKeyToAccount } from 'viem/accounts';
 import { x402Client } from '@x402/core/client';
 import { ExactEvmScheme } from '@x402/evm';
 import { wrapAxiosWithPayment } from '@x402/axios';
+import { randomUUID } from 'crypto';
 
 interface TestOptions {
   key?: string;
   amount?: string;
   verbose?: boolean;
   network?: string;
+  dryRun?: boolean;
+  json?: boolean;
 }
 
-// Map network names to chain IDs
-const NETWORK_CHAIN_IDS: Record<string, number> = {
-  'base': 8453,
-  'base-mainnet': 8453,
-  'base-sepolia': 84532,
-  'ethereum': 1,
-  'mainnet': 1,
-  'sepolia': 11155111
-};
-
 export async function testEndpoint(url: string, options: TestOptions) {
+  if (options.json) {
+    logger.setJsonMode(true);
+  }
+
   logger.header('Testing x402 Endpoint');
   logger.info(`Target: ${url}`);
 
@@ -34,36 +32,97 @@ export async function testEndpoint(url: string, options: TestOptions) {
     const privateKey = getPrivateKey(options.key);
     if (!privateKey) {
       logger.error('Private key required. Use --key flag or set X402_PRIVATE_KEY env var');
+      if (options.json) logger.outputJson();
       process.exit(1);
     }
 
-    // Validate private key format
     const formattedKey = (privateKey.startsWith('0x') ? privateKey : `0x${privateKey}`) as `0x${string}`;
 
     spinner.start('Setting up x402 client');
 
-    // Create EVM signer using viem
     const account = privateKeyToAccount(formattedKey);
     logger.info(`Using wallet: ${account.address}`);
+    logger.setJsonData('wallet', account.address);
 
-    // Determine network
-    const networkName = options.network || 'base-sepolia';
+    const networkName = getNetwork(options.network);
     const chainId = NETWORK_CHAIN_IDS[networkName.toLowerCase()];
     if (!chainId) {
       const available = Object.keys(NETWORK_CHAIN_IDS).join(', ');
       throw new Error(`Unknown network: ${networkName}. Available: ${available}`);
     }
 
-    // Create and configure x402 client
-    // Network format is "eip155:{chainId}" for EVM chains
+    logger.setJsonData('network', networkName);
+    logger.setJsonData('chainId', chainId);
+
+    // If dry-run, just fetch the payment requirements
+    if (options.dryRun) {
+      spinner.succeed('Dry run mode');
+      spinner.start('Fetching payment requirements');
+
+      const response = await axios.get(url, {
+        validateStatus: (status) => status === 402 || status === 200
+      });
+
+      if (response.status === 200) {
+        spinner.succeed('Endpoint is publicly accessible (no payment required)');
+        logger.setJsonData('paymentRequired', false);
+        if (options.json) logger.outputJson();
+        return;
+      }
+
+      spinner.succeed('Payment requirements retrieved');
+
+      // Parse requirements
+      const paymentHeader = response.headers['x-payment-required'];
+      let paymentData: any;
+
+      if (paymentHeader) {
+        try {
+          paymentData = JSON.parse(paymentHeader);
+        } catch {
+          paymentData = response.data;
+        }
+      } else {
+        paymentData = response.data;
+      }
+
+      const accepts = paymentData.accepts || paymentData.paymentRequirements || [];
+
+      logger.header('Would Pay');
+      logger.setJsonData('paymentRequired', true);
+
+      if (accepts[0]) {
+        const req = accepts[0];
+        const amount = req.maxAmountRequired || req.amount;
+        const asset = req.asset || 'unknown';
+        const payTo = req.payTo || req.recipient;
+
+        logger.keyValue('Amount', amount);
+        logger.keyValue('Asset', asset);
+        logger.keyValue('To', payTo);
+        logger.keyValue('Network', req.network || networkName);
+
+        logger.setJsonData('payment', {
+          amount,
+          asset,
+          to: payTo,
+          network: req.network || networkName
+        });
+      }
+
+      logger.log('\nRun without --dry-run to execute payment');
+      if (options.json) logger.outputJson();
+      return;
+    }
+
+    // Full payment flow
     const network = `eip155:${chainId}` as const;
     const evmScheme = new ExactEvmScheme(account);
 
     const client = new x402Client()
       .register(network, evmScheme)
-      .register('eip155:*', evmScheme); // Also register for wildcard matching
+      .register('eip155:*', evmScheme);
 
-    // Wrap axios with payment handling
     const paymentAxios = wrapAxiosWithPayment(axios.create(), client);
 
     spinner.succeed('x402 client configured');
@@ -76,9 +135,11 @@ export async function testEndpoint(url: string, options: TestOptions) {
     spinner.succeed(`Request successful (status: ${response.status})`);
 
     logger.header('Response');
+    logger.setJsonData('status', response.status);
 
-    if (options.verbose) {
+    if (options.verbose || options.json) {
       logger.json(response.data);
+      logger.setJsonData('response', response.data);
     } else {
       const dataStr = typeof response.data === 'string'
         ? response.data
@@ -92,40 +153,63 @@ export async function testEndpoint(url: string, options: TestOptions) {
       }
     }
 
-    // Check for payment details in response headers
+    // Check for payment details and save receipt
     const paymentHeader = response.headers['x-payment-response'];
     if (paymentHeader) {
       logger.header('Payment Details');
       try {
         const paymentInfo = JSON.parse(paymentHeader);
         logger.keyValue('Transaction', paymentInfo.txHash || 'N/A');
-        logger.keyValue('Network', paymentInfo.network || 'N/A');
+        logger.keyValue('Network', paymentInfo.network || networkName);
+
+        // Save receipt
+        const receipt: PaymentReceipt = {
+          id: randomUUID(),
+          timestamp: new Date().toISOString(),
+          url,
+          txHash: paymentInfo.txHash,
+          network: paymentInfo.network || networkName,
+          amount: paymentInfo.amount || 'unknown',
+          asset: paymentInfo.asset || 'USDC',
+          from: account.address,
+          to: paymentInfo.recipient || 'unknown',
+          status: 'success'
+        };
+
+        saveReceipt(receipt);
+        logger.success(`Receipt saved: ${receipt.id.substring(0, 8)}`);
+        logger.setJsonData('receipt', receipt);
+
       } catch {
         logger.keyValue('Payment Header', paymentHeader);
       }
     }
+
+    if (options.json) logger.outputJson();
 
   } catch (error: any) {
     spinner.fail('Request failed');
 
     if (error.response?.status === 402) {
       logger.error('Payment failed or was rejected');
-      logger.header('Payment Requirements');
+      logger.setJsonData('error', 'Payment failed');
 
-      // Try to extract payment info from headers (v2) or body (v1)
       const paymentRequiredHeader = error.response.headers['x-payment-required'];
       if (paymentRequiredHeader) {
         try {
           const requirements = JSON.parse(paymentRequiredHeader);
           logger.json(requirements);
+          logger.setJsonData('paymentRequirements', requirements);
         } catch {
           logger.log(paymentRequiredHeader);
         }
       } else if (error.response.data) {
         logger.json(error.response.data);
+        logger.setJsonData('paymentRequirements', error.response.data);
       }
     } else {
       logger.error(error.message);
+      logger.setJsonData('error', error.message);
     }
 
     if (options.verbose && error.response) {
@@ -137,6 +221,7 @@ export async function testEndpoint(url: string, options: TestOptions) {
       });
     }
 
+    if (options.json) logger.outputJson();
     process.exit(1);
   }
 }

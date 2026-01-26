@@ -6,6 +6,7 @@ import { base, baseSepolia, mainnet, sepolia } from 'viem/chains';
 
 interface VerifyOptions {
   network?: string;
+  json?: boolean;
 }
 
 // Common USDC contract addresses
@@ -36,10 +37,17 @@ function getChain(networkName: string): Chain {
 }
 
 export async function verifyTransaction(txHash: string, options: VerifyOptions) {
+  if (options.json) {
+    logger.setJsonMode(true);
+  }
+
   logger.header('Verify x402 Transaction');
   const networkName = options.network || 'base-sepolia';
   logger.info(`Transaction: ${txHash}`);
   logger.info(`Network: ${networkName}`);
+
+  logger.setJsonData('txHash', txHash);
+  logger.setJsonData('network', networkName);
 
   const spinner = ora('Connecting to network').start();
 
@@ -87,6 +95,14 @@ export async function verifyTransaction(txHash: string, options: VerifyOptions) 
     logger.keyValue('To', tx.to || 'Contract Creation');
     logger.keyValue('Gas Used', receipt.gasUsed.toString());
 
+    logger.setJsonData('transaction', {
+      status: receipt.status,
+      block: receipt.blockNumber.toString(),
+      from: tx.from,
+      to: tx.to || null,
+      gasUsed: receipt.gasUsed.toString()
+    });
+
     // Check for USDC transfers (common x402 payment token)
     const usdcAddress = USDC_ADDRESSES[networkName.toLowerCase()];
 
@@ -103,6 +119,8 @@ export async function verifyTransaction(txHash: string, options: VerifyOptions) 
     if (transferLogs.length === 0) {
       logger.warn('No ERC20 transfers found in this transaction');
       logger.info('This may not be an x402 payment transaction');
+      logger.setJsonData('transfers', []);
+      if (options.json) logger.outputJson();
       return;
     }
 
@@ -127,6 +145,14 @@ export async function verifyTransaction(txHash: string, options: VerifyOptions) 
         logger.success('This appears to be a USDC payment (common x402 token)');
       }
 
+      logger.appendJsonData('transfers', {
+        token: isUsdc ? 'USDC' : log.address,
+        from,
+        to,
+        amount: formattedValue,
+        isUsdc
+      });
+
       console.log();
     }
 
@@ -147,6 +173,8 @@ export async function verifyTransaction(txHash: string, options: VerifyOptions) 
       }
     }
 
+    if (options.json) logger.outputJson();
+
   } catch (error: any) {
     spinner.fail('Verification failed');
 
@@ -157,6 +185,7 @@ export async function verifyTransaction(txHash: string, options: VerifyOptions) 
       logger.error(error.message);
     }
 
+    if (options.json) logger.outputJson();
     process.exit(1);
   }
 }

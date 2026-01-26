@@ -1,6 +1,6 @@
 {
   "name": "x402-cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "CLI for testing x402 payment endpoints (compatible with x402 v2)",
   "main": "dist/index.js",
   "bin": {
