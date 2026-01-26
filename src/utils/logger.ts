@@ -5,7 +5,7 @@ export const logger = {
   error: (message: string) => console.log(chalk.red('✗'), message),
   info: (message: string) => console.log(chalk.blue('ℹ'), message),
   warn: (message: string) => console.log(chalk.yellow('⚠'), message),
-  step: (message: string) => console.log(chalk.cyan('→'), message),
+  step: (message: string) => chalk.cyan('→') + ' ' + message,
   log: (message: string) => console.log(message),
   header: (message: string) => {
     console.log('\n' + chalk.bold.underline(message));

@@ -1,6 +1,6 @@
 # x402-cli
 
-CLI for testing x402 payment endpoints.
+CLI for testing x402 payment endpoints. Compatible with **x402 v2**.
 
 ## What it does
 
@@ -46,12 +46,13 @@ Test an endpoint by making a payment.
 
 Options:
 - `-k, --key <privateKey>` - Private key for signing payments (or set X402_PRIVATE_KEY env var)
+- `-n, --network <network>` - Network for payments (default: base-sepolia)
 - `-a, --amount <amount>` - Override payment amount
 - `-v, --verbose` - Show detailed payment flow
 
 **Example:**
 ```bash
-x402 test https://api.example.com/weather --verbose
+x402 test https://api.example.com/weather --network base-sepolia --verbose
 ```
 
 ### `x402 discover`
@@ -88,8 +89,15 @@ Options:
 
 **Example:**
 ```bash
-x402 verify 0x1234... --network base-mainnet
+x402 verify 0x1234... --network base
 ```
+
+## Supported Networks
+
+- `base` / `base-mainnet` - Base Mainnet (chain ID: 8453)
+- `base-sepolia` - Base Sepolia testnet (chain ID: 84532)
+- `ethereum` / `mainnet` - Ethereum Mainnet (chain ID: 1)
+- `sepolia` - Ethereum Sepolia testnet (chain ID: 11155111)
 
 ## Configuration
 
@@ -97,8 +105,19 @@ Create a `.env` file in your working directory:
 
 ```bash
 X402_PRIVATE_KEY=your_private_key_here
-X402_FACILITATOR_URL=https://x402-facilitator.base.org
+X402_NETWORK=base-sepolia
+X402_RPC_URL=https://your-rpc-endpoint.com  # optional
+X402_FACILITATOR_URL=https://x402.org/facilitator  # optional
 ```
+
+## x402 v2 Compatibility
+
+This CLI is built for x402 v2 and uses:
+- `@x402/core` - Core types and client
+- `@x402/axios` - HTTP client wrapper with automatic payment handling
+- `@x402/evm` - EVM payment scheme (Exact scheme with EIP-3009)
+
+The CLI supports both v2 (header-based) and v1 (body-based) payment requirement formats.
 
 ## Development
 

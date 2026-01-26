@@ -1,13 +1,28 @@
 import axios from 'axios';
-import { logger } from '../utils/logger';
-import { getPrivateKey } from '../utils/config';
+import { logger } from '../utils/logger.js';
+import { getPrivateKey } from '../utils/config.js';
 import ora from 'ora';
+import { privateKeyToAccount } from 'viem/accounts';
+import { x402Client } from '@x402/core/client';
+import { ExactEvmScheme } from '@x402/evm';
+import { wrapAxiosWithPayment } from '@x402/axios';
 
 interface TestOptions {
   key?: string;
   amount?: string;
   verbose?: boolean;
+  network?: string;
 }
+
+// Map network names to chain IDs
+const NETWORK_CHAIN_IDS: Record<string, number> = {
+  'base': 8453,
+  'base-mainnet': 8453,
+  'base-sepolia': 84532,
+  'ethereum': 1,
+  'mainnet': 1,
+  'sepolia': 11155111
+};
 
 export async function testEndpoint(url: string, options: TestOptions) {
   logger.header('Testing x402 Endpoint');
@@ -22,67 +37,106 @@ export async function testEndpoint(url: string, options: TestOptions) {
       process.exit(1);
     }
 
-    spinner.start('Making initial request to get payment requirements');
+    // Validate private key format
+    const formattedKey = (privateKey.startsWith('0x') ? privateKey : `0x${privateKey}`) as `0x${string}`;
 
-    const initialResponse = await axios.get(url, {
-      validateStatus: (status) => status === 402 || status === 200
-    });
+    spinner.start('Setting up x402 client');
 
-    if (initialResponse.status === 200) {
-      spinner.succeed('Endpoint is publicly accessible (no payment required)');
-      logger.success('Response received');
-      if (options.verbose) {
-        logger.json(initialResponse.data);
-      }
-      return;
+    // Create EVM signer using viem
+    const account = privateKeyToAccount(formattedKey);
+    logger.info(`Using wallet: ${account.address}`);
+
+    // Determine network
+    const networkName = options.network || 'base-sepolia';
+    const chainId = NETWORK_CHAIN_IDS[networkName.toLowerCase()];
+    if (!chainId) {
+      const available = Object.keys(NETWORK_CHAIN_IDS).join(', ');
+      throw new Error(`Unknown network: ${networkName}. Available: ${available}`);
     }
 
-    if (initialResponse.status !== 402) {
-      spinner.fail(`Unexpected status code: ${initialResponse.status}`);
-      return;
-    }
+    // Create and configure x402 client
+    // Network format is "eip155:{chainId}" for EVM chains
+    const network = `eip155:${chainId}` as const;
+    const evmScheme = new ExactEvmScheme(account);
 
-    spinner.succeed('Received payment requirements (402)');
+    const client = new x402Client()
+      .register(network, evmScheme)
+      .register('eip155:*', evmScheme); // Also register for wildcard matching
 
-    const paymentRequirements = initialResponse.data;
+    // Wrap axios with payment handling
+    const paymentAxios = wrapAxiosWithPayment(axios.create(), client);
+
+    spinner.succeed('x402 client configured');
+    logger.info(`Network: ${networkName} (chain ID: ${chainId})`);
+
+    spinner.start('Making request to x402 endpoint');
+
+    const response = await paymentAxios.get(url);
+
+    spinner.succeed(`Request successful (status: ${response.status})`);
+
+    logger.header('Response');
 
     if (options.verbose) {
-      logger.header('Payment Requirements');
-      logger.json(paymentRequirements);
+      logger.json(response.data);
+    } else {
+      const dataStr = typeof response.data === 'string'
+        ? response.data
+        : JSON.stringify(response.data);
+
+      if (dataStr.length > 500) {
+        logger.log(dataStr.substring(0, 500) + '...');
+        logger.info('Use --verbose to see full response');
+      } else {
+        logger.log(dataStr);
+      }
     }
 
-    if (!paymentRequirements.accepts || paymentRequirements.accepts.length === 0) {
-      logger.error('No payment options available');
-      return;
+    // Check for payment details in response headers
+    const paymentHeader = response.headers['x-payment-response'];
+    if (paymentHeader) {
+      logger.header('Payment Details');
+      try {
+        const paymentInfo = JSON.parse(paymentHeader);
+        logger.keyValue('Transaction', paymentInfo.txHash || 'N/A');
+        logger.keyValue('Network', paymentInfo.network || 'N/A');
+      } catch {
+        logger.keyValue('Payment Header', paymentHeader);
+      }
     }
-
-    const selectedRequirement = paymentRequirements.accepts[0];
-
-    logger.step('Payment Details:');
-    logger.keyValue('Amount', `${selectedRequirement.maxAmountRequired} (${selectedRequirement.asset})`);
-    logger.keyValue('Network', selectedRequirement.network);
-    logger.keyValue('Scheme', selectedRequirement.scheme);
-    logger.keyValue('Pay To', selectedRequirement.payTo);
-
-    spinner.start('Creating payment signature');
-
-    // Note: Actual payment creation would use x402 SDK here
-    // This is a placeholder showing the flow
-    spinner.info('Payment creation requires x402 SDK integration');
-    logger.warn('Full payment flow not yet implemented - this is a demo showing the structure');
-
-    logger.header('Next Steps');
-    logger.log('To complete the payment flow, integrate with:');
-    logger.log('  - x402 package for payment creation');
-    logger.log('  - x402-axios for automatic payment handling');
-    logger.log('  - Wallet for signing transactions');
 
   } catch (error: any) {
     spinner.fail('Request failed');
-    logger.error(error.message);
-    if (options.verbose && error.response) {
-      logger.json(error.response.data);
+
+    if (error.response?.status === 402) {
+      logger.error('Payment failed or was rejected');
+      logger.header('Payment Requirements');
+
+      // Try to extract payment info from headers (v2) or body (v1)
+      const paymentRequiredHeader = error.response.headers['x-payment-required'];
+      if (paymentRequiredHeader) {
+        try {
+          const requirements = JSON.parse(paymentRequiredHeader);
+          logger.json(requirements);
+        } catch {
+          logger.log(paymentRequiredHeader);
+        }
+      } else if (error.response.data) {
+        logger.json(error.response.data);
+      }
+    } else {
+      logger.error(error.message);
     }
+
+    if (options.verbose && error.response) {
+      logger.header('Full Error Response');
+      logger.json({
+        status: error.response.status,
+        headers: error.response.headers,
+        data: error.response.data
+      });
+    }
+
     process.exit(1);
   }
 }

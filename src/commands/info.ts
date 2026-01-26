@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { logger } from '../utils/logger';
+import { logger } from '../utils/logger.js';
 import ora from 'ora';
 
 interface InfoOptions {
@@ -31,7 +31,24 @@ export async function getEndpointInfo(url: string, options: InfoOptions) {
 
     spinner.succeed('Payment requirements retrieved');
 
-    const paymentData = response.data;
+    // v2 uses headers, v1 uses body
+    const paymentRequiredHeader = response.headers['x-payment-required'];
+    let paymentData: any;
+
+    if (paymentRequiredHeader) {
+      // v2 format - payment requirements in header
+      try {
+        paymentData = JSON.parse(paymentRequiredHeader);
+        logger.info('x402 Version: 2 (header-based)');
+      } catch {
+        logger.warn('Could not parse payment header');
+        paymentData = response.data;
+      }
+    } else {
+      // v1 format - payment requirements in body
+      paymentData = response.data;
+      logger.info('x402 Version: 1 (body-based)');
+    }
 
     if (options.verbose) {
       logger.header('Full Payment Requirements');
@@ -40,37 +57,58 @@ export async function getEndpointInfo(url: string, options: InfoOptions) {
     }
 
     logger.header('Payment Requirements');
-    logger.keyValue('x402 Version', paymentData.x402Version?.toString() || 'N/A');
+
+    if (paymentData.x402Version) {
+      logger.keyValue('Protocol Version', paymentData.x402Version.toString());
+    }
 
     if (paymentData.error) {
       logger.error(`Server Error: ${paymentData.error}`);
     }
 
-    if (!paymentData.accepts || paymentData.accepts.length === 0) {
+    const accepts = paymentData.accepts || paymentData.paymentRequirements || [];
+
+    if (!accepts || accepts.length === 0) {
       logger.warn('No payment options available');
       return;
     }
 
-    logger.log(`\nAccepts ${paymentData.accepts.length} payment option(s):\n`);
+    logger.log(`\nAccepts ${accepts.length} payment option(s):\n`);
 
-    paymentData.accepts.forEach((requirement: any, index: number) => {
+    accepts.forEach((requirement: any, index: number) => {
       console.log(logger.step(`Option ${index + 1}`));
-      logger.keyValue('  Network', requirement.network);
-      logger.keyValue('  Scheme', requirement.scheme);
-      logger.keyValue('  Amount', requirement.maxAmountRequired);
+
+      // v2 uses scheme:network format, v1 has separate fields
+      if (requirement.scheme && requirement.scheme.includes(':')) {
+        const [scheme, network] = requirement.scheme.split(':');
+        logger.keyValue('  Scheme', scheme);
+        logger.keyValue('  Network', network);
+      } else {
+        logger.keyValue('  Network', requirement.network);
+        logger.keyValue('  Scheme', requirement.scheme);
+      }
+
+      // Amount field names vary between versions
+      const amount = requirement.maxAmountRequired || requirement.amount || requirement.price;
+      logger.keyValue('  Amount', amount);
       logger.keyValue('  Asset', requirement.asset);
-      logger.keyValue('  Pay To', requirement.payTo);
+      logger.keyValue('  Pay To', requirement.payTo || requirement.recipient);
 
       if (requirement.description) {
         logger.keyValue('  Description', requirement.description);
       }
 
-      if (requirement.mimeType) {
-        logger.keyValue('  Response Type', requirement.mimeType);
+      if (requirement.mimeType || requirement.resource?.mimeType) {
+        logger.keyValue('  Response Type', requirement.mimeType || requirement.resource?.mimeType);
       }
 
-      if (requirement.maxTimeoutSeconds) {
-        logger.keyValue('  Max Timeout', `${requirement.maxTimeoutSeconds}s`);
+      if (requirement.maxTimeoutSeconds || requirement.timeout) {
+        logger.keyValue('  Max Timeout', `${requirement.maxTimeoutSeconds || requirement.timeout}s`);
+      }
+
+      // v2 may include facilitator info
+      if (requirement.facilitator) {
+        logger.keyValue('  Facilitator', requirement.facilitator);
       }
 
       console.log();

@@ -1,6 +1,6 @@
 import axios from 'axios';
-import { logger } from '../utils/logger';
-import { getFacilitatorUrl } from '../utils/config';
+import { logger } from '../utils/logger.js';
+import { getFacilitatorUrl } from '../utils/config.js';
 import ora from 'ora';
 
 interface DiscoverOptions {
