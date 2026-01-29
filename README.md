@@ -8,6 +8,8 @@ CLI for testing x402 payment endpoints. Compatible with **x402 v2**.
 - Discover available x402 endpoints
 - Check payment requirements without paying
 - Verify transactions on-chain
+- Monitor endpoints and manage wallets
+- Run local mock servers for development
 
 ## Installation
 
@@ -23,73 +25,172 @@ npx x402-cli <command>
 
 ## Quick Start
 
-Check what an endpoint accepts:
 ```bash
+# Interactive setup wizard
+x402 init
+
+# Check what an endpoint accepts
 x402 info https://api.example.com/resource
-```
 
-Find available x402 APIs:
-```bash
+# Find available x402 APIs
 x402 discover
-```
 
-Test paying for something:
-```bash
+# Test paying for something
 x402 test https://api.example.com/resource --key YOUR_PRIVATE_KEY
 ```
 
 ## Commands
 
-### `x402 test <url>`
+### Core Commands
 
-Test an endpoint by making a payment.
+| Command | Description |
+|---------|-------------|
+| `test <url>` | Make a payment and receive the resource |
+| `info <url>` | Get payment requirements without paying |
+| `verify <txHash>` | Verify a transaction on-chain |
+| `balance` | Check wallet ETH and USDC balance |
+| `discover` | Find x402 endpoints in the network |
+| `config` | Manage x402 configuration |
+| `watch <url>` | Monitor an endpoint for changes |
+| `batch <file>` | Test multiple endpoints from a file |
+| `receipt [id]` | View or export payment receipts |
 
-Options:
-- `-k, --key <privateKey>` - Private key for signing payments (or set X402_PRIVATE_KEY env var)
-- `-n, --network <network>` - Network for payments (default: base-sepolia)
-- `-a, --amount <amount>` - Override payment amount
-- `-v, --verbose` - Show detailed payment flow
+### Developer Experience
 
-**Example:**
+| Command | Description |
+|---------|-------------|
+| `init` | Interactive setup wizard |
+| `mock` | Start a local mock x402 server |
+| `shell` | Interactive REPL mode |
+| `diff <url>` | Monitor payment requirement changes |
+
+### Wallet & Payments
+
+| Command | Description |
+|---------|-------------|
+| `fund` | Get testnet ETH from faucets |
+| `history` | View payment history |
+| `estimate <url>` | Estimate total cost (payment + gas) |
+| `allowance` | Check/set USDC allowance |
+| `spend-limit` | Set spending safety limits |
+| `wallet` | Manage multiple wallets |
+
+### Analytics & Monitoring
+
+| Command | Description |
+|---------|-------------|
+| `benchmark <url>` | Performance test an endpoint |
+| `stats` | View aggregate usage statistics |
+| `health <url>` | Check endpoint health |
+| `alert` | Set up alerts for endpoint changes |
+| `audit <address>` | Audit payments for an address |
+
+### Integration & Automation
+
+| Command | Description |
+|---------|-------------|
+| `curl <url>` | Generate curl command with payment headers |
+| `openapi <url>` | Generate OpenAPI spec |
+| `proxy` | Run local proxy that auto-handles 402s |
+| `script <file>` | Run scripted test scenarios |
+
+### Discovery & Registry
+
+| Command | Description |
+|---------|-------------|
+| `register <url>` | Register endpoint in the directory |
+| `browse` | Interactive endpoint browser |
+| `star [url]` | Bookmark favorite endpoints |
+
+## Examples
+
+### Test an Endpoint
+
 ```bash
+# Dry run to see what would be paid
+x402 test https://api.example.com/weather --dry-run
+
+# Make actual payment
 x402 test https://api.example.com/weather --network base-sepolia --verbose
 ```
 
-### `x402 discover`
+### Estimate Costs
 
-Find x402 endpoints.
-
-Options:
-- `-f, --filter <type>` - Filter by resource type
-- `-l, --limit <number>` - Limit number of results (default: 20)
-
-**Example:**
 ```bash
-x402 discover --filter api --limit 10
+x402 estimate https://api.example.com/resource
 ```
 
-### `x402 info <url>`
+### Run Local Mock Server
 
-Get payment info without paying.
-
-Options:
-- `-v, --verbose` - Show full payment requirements JSON
-
-**Example:**
 ```bash
-x402 info https://api.example.com/premium --verbose
+# Start mock server on port 3402
+x402 mock --port 3402 --price 100
+
+# Test against mock
+x402 test http://localhost:3402/resource
 ```
 
-### `x402 verify <txHash>`
+### Interactive Shell
 
-Check if a transaction was an x402 payment.
-
-Options:
-- `-n, --network <network>` - Network to check (default: base-sepolia)
-
-**Example:**
 ```bash
-x402 verify 0x1234... --network base
+x402 shell
+
+x402> info https://api.example.com/resource
+x402> balance
+x402> test https://api.example.com/resource
+x402> exit
+```
+
+### Script Automation
+
+Create `test-script.yaml`:
+
+```yaml
+name: API Test Suite
+steps:
+  - name: Check weather API
+    action: info
+    url: https://api.example.com/weather
+
+  - name: Wait a bit
+    action: wait
+    delay: 1000
+
+  - name: Test payment
+    action: test
+    url: https://api.example.com/weather
+```
+
+Run:
+
+```bash
+x402 script test-script.yaml --dry-run
+```
+
+### Set Spending Limits
+
+```bash
+# Set daily limit
+x402 spend-limit --daily 10
+
+# Set per-transaction limit
+x402 spend-limit --set 1
+
+# View current limits
+x402 spend-limit
+```
+
+### Manage Wallets
+
+```bash
+# Add a new wallet
+x402 wallet add
+
+# List wallets
+x402 wallet list
+
+# Set default wallet
+x402 wallet default
 ```
 
 ## Supported Networks
@@ -108,6 +209,13 @@ X402_PRIVATE_KEY=your_private_key_here
 X402_NETWORK=base-sepolia
 X402_RPC_URL=https://your-rpc-endpoint.com  # optional
 X402_FACILITATOR_URL=https://x402.org/facilitator  # optional
+```
+
+Or use the global config:
+
+```bash
+x402 config --set privateKey=0x...
+x402 config --set network=base-sepolia
 ```
 
 ## x402 v2 Compatibility
