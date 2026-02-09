@@ -1,15 +1,17 @@
 # x402-cli
 
-CLI for testing x402 payment endpoints. Compatible with **x402 v2**.
+Feature-rich CLI for testing, debugging, and managing x402 payment endpoints. Compatible with **x402 v2**. 35 commands across 7 categories.
 
 ## What it does
 
-- Test x402 endpoints and make payments
-- Discover available x402 endpoints
-- Check payment requirements without paying
-- Verify transactions on-chain
-- Monitor endpoints and manage wallets
-- Run local mock servers for development
+- Test x402 endpoints and make real USDC payments
+- Compare endpoints side-by-side (price, latency, network)
+- Decode and inspect x402 payment headers for debugging
+- Discover available x402 endpoints in the network
+- Verify transactions on-chain across multiple chains
+- Monitor endpoints, manage wallets, and export receipts
+- Run local mock servers and auto-payment proxies for development
+- Multi-chain: Base, Arbitrum, Optimism, Polygon (+ testnets)
 
 ## Installation
 
@@ -102,6 +104,14 @@ x402 test https://api.example.com/resource --key YOUR_PRIVATE_KEY
 | `browse` | Interactive endpoint browser |
 | `star [url]` | Bookmark favorite endpoints |
 
+### Comparison & Debugging
+
+| Command | Description |
+|---------|-------------|
+| `compare <urls...>` | Compare payment requirements across multiple endpoints |
+| `decode <input>` | Decode and inspect x402 payment headers or requirements |
+| `export` | Export payment history to CSV or JSON |
+
 ## Examples
 
 ### Test an Endpoint
@@ -167,6 +177,36 @@ Run:
 x402 script test-script.yaml --dry-run
 ```
 
+### Compare Endpoints
+
+```bash
+# Compare pricing and latency across multiple APIs
+x402 compare https://api1.example.com/data https://api2.example.com/data https://api3.example.com/data
+```
+
+### Decode Payment Headers
+
+```bash
+# Decode a base64 x-payment header
+x402 decode "eyJ4NDAyVmVyc2lvbiI6Mn0="
+
+# Decode from a live endpoint
+x402 decode https://api.example.com/resource
+
+# Decode raw JSON
+x402 decode '{"x402Version":2,"accepts":[...]}'
+```
+
+### Export Receipts
+
+```bash
+# Export all receipts to CSV
+x402 export
+
+# Export as JSON with filters
+x402 export --format json --from 2025-01-01 --network base --output january-payments.json
+```
+
 ### Set Spending Limits
 
 ```bash
@@ -195,10 +235,15 @@ x402 wallet default
 
 ## Supported Networks
 
-- `base` / `base-mainnet` - Base Mainnet (chain ID: 8453)
-- `base-sepolia` - Base Sepolia testnet (chain ID: 84532)
-- `ethereum` / `mainnet` - Ethereum Mainnet (chain ID: 1)
-- `sepolia` - Ethereum Sepolia testnet (chain ID: 11155111)
+| Network | Chain ID | Testnet |
+|---------|----------|---------|
+| `base` | 8453 | `base-sepolia` (84532) |
+| `ethereum` | 1 | `sepolia` (11155111) |
+| `arbitrum` | 42161 | `arbitrum-sepolia` (421614) |
+| `optimism` | 10 | `optimism-sepolia` (11155420) |
+| `polygon` | 137 | `polygon-amoy` (80002) |
+
+All networks have built-in public RPC endpoints and USDC contract addresses.
 
 ## Configuration
 
