@@ -11,12 +11,41 @@ import { watchCommand } from './commands/watch.js';
 import { batchCommand } from './commands/batch.js';
 import { receiptCommand } from './commands/receipt.js';
 
+// New commands
+import { fundCommand } from './commands/fund.js';
+import { historyCommand } from './commands/history.js';
+import { estimateCommand } from './commands/estimate.js';
+import { allowanceCommand } from './commands/allowance.js';
+import { spendLimitCommand } from './commands/spend-limit.js';
+import { initCommand } from './commands/init.js';
+import { mockCommand } from './commands/mock.js';
+import { shellCommand } from './commands/shell.js';
+import { diffCommand } from './commands/diff.js';
+import { benchmarkCommand } from './commands/benchmark.js';
+import { statsCommand } from './commands/stats.js';
+import { healthCommand } from './commands/health.js';
+import { curlCommand } from './commands/curl.js';
+import { openapiCommand } from './commands/openapi.js';
+import { proxyCommand } from './commands/proxy.js';
+import { scriptCommand } from './commands/script.js';
+import { walletCommand } from './commands/wallet.js';
+import { auditCommand } from './commands/audit.js';
+import { alertCommand } from './commands/alert.js';
+import { registerCommand } from './commands/register.js';
+import { browseCommand } from './commands/browse.js';
+import { starCommand } from './commands/star.js';
+import { compareCommand } from './commands/compare.js';
+import { decodeCommand } from './commands/decode.js';
+import { exportCommand } from './commands/export.js';
+
 const program = new Command();
 
 program
   .name('x402')
   .description('CLI tool for testing and interacting with x402 payment endpoints')
-  .version('0.3.0');
+  .version('0.5.0');
+
+// ========== CORE COMMANDS ==========
 
 program
   .command('test <url>')
@@ -89,5 +118,234 @@ program
   .option('-e, --export <file>', 'Export receipt to file')
   .option('--json', 'Output as JSON')
   .action(receiptCommand);
+
+// ========== DEVELOPER EXPERIENCE ==========
+
+program
+  .command('init')
+  .description('Interactive setup wizard - configure wallet, network, and environment')
+  .option('-f, --force', 'Force reconfiguration even if already set up')
+  .option('--json', 'Output as JSON')
+  .action(initCommand);
+
+program
+  .command('mock')
+  .description('Start a local mock x402 server for testing')
+  .option('-p, --port <port>', 'Port to listen on', '3402')
+  .option('--price <amount>', 'Payment price in raw units', '100')
+  .option('--asset <asset>', 'Payment asset', 'USDC')
+  .option('--recipient <address>', 'Payment recipient address')
+  .option('--json', 'Output as JSON')
+  .action(mockCommand);
+
+program
+  .command('shell')
+  .description('Start interactive REPL mode for testing')
+  .option('-k, --key <privateKey>', 'Private key for signing')
+  .option('-n, --network <network>', 'Network to use')
+  .action(shellCommand);
+
+program
+  .command('diff <url>')
+  .description('Monitor payment requirements for changes over time')
+  .option('-i, --interval <seconds>', 'Check interval in seconds', '5')
+  .option('-c, --count <number>', 'Number of checks (default: unlimited)')
+  .option('--json', 'Output as JSON')
+  .action(diffCommand);
+
+// ========== WALLET & PAYMENTS ==========
+
+program
+  .command('fund')
+  .description('Get testnet ETH from faucets')
+  .option('-k, --key <privateKey>', 'Private key')
+  .option('-n, --network <network>', 'Testnet network (base-sepolia, sepolia)')
+  .option('--json', 'Output as JSON')
+  .action(fundCommand);
+
+program
+  .command('history')
+  .description('View payment history from local receipts and on-chain')
+  .option('-k, --key <privateKey>', 'Private key')
+  .option('-a, --address <address>', 'Address to check')
+  .option('-n, --network <network>', 'Network')
+  .option('-l, --limit <number>', 'Limit results', '20')
+  .option('--onchain', 'Include on-chain USDC transfer history')
+  .option('--json', 'Output as JSON')
+  .action(historyCommand);
+
+program
+  .command('estimate <url>')
+  .description('Estimate total cost (payment + gas) for an endpoint')
+  .option('-k, --key <privateKey>', 'Private key (to check balance)')
+  .option('-n, --network <network>', 'Network')
+  .option('--json', 'Output as JSON')
+  .action(estimateCommand);
+
+program
+  .command('allowance')
+  .description('Check or set USDC allowance for spender contracts')
+  .option('-k, --key <privateKey>', 'Private key')
+  .option('-n, --network <network>', 'Network')
+  .option('-s, --spender <address>', 'Spender address to check/approve')
+  .option('-a, --amount <amount>', 'Amount to approve (use "max" for unlimited)')
+  .option('--json', 'Output as JSON')
+  .action(allowanceCommand);
+
+program
+  .command('spend-limit')
+  .description('Set spending limits for safety')
+  .option('--set <amount>', 'Set per-transaction limit in USDC')
+  .option('--daily <amount>', 'Set daily spending limit')
+  .option('--session <amount>', 'Set session spending limit')
+  .option('--reset', 'Reset all limits')
+  .option('--json', 'Output as JSON')
+  .action(spendLimitCommand);
+
+program
+  .command('wallet [action]')
+  .description('Manage multiple wallets (list, add, remove, default, export)')
+  .option('--json', 'Output as JSON')
+  .action(walletCommand);
+
+// ========== ANALYTICS & MONITORING ==========
+
+program
+  .command('benchmark <url>')
+  .description('Performance test an endpoint')
+  .option('-r, --requests <number>', 'Number of requests', '100')
+  .option('-c, --concurrent <number>', 'Concurrent requests', '10')
+  .option('-t, --timeout <seconds>', 'Timeout per request', '10')
+  .option('--pay', 'Include actual payments in benchmark')
+  .option('-k, --key <privateKey>', 'Private key (if --pay)')
+  .option('--json', 'Output as JSON')
+  .action(benchmarkCommand);
+
+program
+  .command('stats')
+  .description('View aggregate usage statistics')
+  .option('-p, --period <period>', 'Time period (today, week, month)')
+  .option('--json', 'Output as JSON')
+  .action(statsCommand);
+
+program
+  .command('health <url>')
+  .description('Check endpoint health and x402 configuration')
+  .option('-t, --timeout <seconds>', 'Request timeout', '10')
+  .option('-f, --full', 'Show full payment requirements')
+  .option('--json', 'Output as JSON')
+  .action(healthCommand);
+
+program
+  .command('alert')
+  .description('Set up alerts for endpoint changes')
+  .option('--add <url>', 'Add alert for endpoint')
+  .option('--remove <url>', 'Remove alert')
+  .option('--list', 'List all alerts')
+  .option('--check', 'Check all alerts now')
+  .option('--webhook <url>', 'Webhook URL for notifications')
+  .option('--json', 'Output as JSON')
+  .action(alertCommand);
+
+program
+  .command('audit <address>')
+  .description('Audit x402 payments for an address')
+  .option('-n, --network <network>', 'Network to audit')
+  .option('-b, --blocks <number>', 'Number of blocks to scan', '10000')
+  .option('--json', 'Output as JSON')
+  .action(auditCommand);
+
+// ========== INTEGRATION & AUTOMATION ==========
+
+program
+  .command('curl <url>')
+  .description('Generate curl command with x402 payment headers')
+  .option('-X, --method <method>', 'HTTP method', 'GET')
+  .option('-H, --headers <headers...>', 'Additional headers')
+  .option('-d, --data <data>', 'Request body')
+  .option('--json', 'Output as JSON')
+  .action(curlCommand);
+
+program
+  .command('openapi <url>')
+  .description('Generate OpenAPI spec from x402 endpoint')
+  .option('-o, --output <file>', 'Output file path')
+  .option('-t, --title <title>', 'API title')
+  .option('--json', 'Output as JSON')
+  .action(openapiCommand);
+
+program
+  .command('proxy')
+  .description('Run local proxy that auto-handles 402 payments')
+  .option('-p, --port <port>', 'Port to listen on', '3401')
+  .option('-k, --key <privateKey>', 'Private key for payments')
+  .option('-n, --network <network>', 'Network for payments')
+  .option('--allowlist <hosts>', 'Comma-separated list of allowed hosts')
+  .option('--json', 'Output as JSON')
+  .action(proxyCommand);
+
+program
+  .command('script <file>')
+  .description('Run scripted test scenarios from YAML/JSON file')
+  .option('-k, --key <privateKey>', 'Private key')
+  .option('-n, --network <network>', 'Network')
+  .option('-d, --dry-run', 'Dry run (no actual payments)')
+  .option('--json', 'Output as JSON')
+  .action(scriptCommand);
+
+// ========== DISCOVERY & REGISTRY ==========
+
+program
+  .command('register <url>')
+  .description('Register an endpoint in the x402 directory')
+  .option('--name <name>', 'Endpoint name')
+  .option('--description <desc>', 'Endpoint description')
+  .option('--category <cat>', 'Category (api, data, ai, media, finance, other)')
+  .option('--tags <tags>', 'Comma-separated tags')
+  .option('--json', 'Output as JSON')
+  .action(registerCommand);
+
+program
+  .command('browse')
+  .description('Interactive browser for discovering x402 endpoints')
+  .option('-c, --category <category>', 'Filter by category')
+  .option('--json', 'Output as JSON')
+  .action(browseCommand);
+
+program
+  .command('star [url]')
+  .description('Bookmark favorite endpoints')
+  .option('-r, --remove', 'Remove star')
+  .option('-l, --list', 'List starred endpoints')
+  .option('--json', 'Output as JSON')
+  .action(starCommand);
+
+// ========== COMPARISON & DEBUGGING ==========
+
+program
+  .command('compare <urls...>')
+  .description('Compare payment requirements across multiple x402 endpoints')
+  .option('-t, --timeout <seconds>', 'Timeout per request in seconds', '10')
+  .option('--json', 'Output as JSON')
+  .action(compareCommand);
+
+program
+  .command('decode <input>')
+  .description('Decode and inspect x402 payment headers or requirements')
+  .option('-u, --url', 'Treat input as a URL to fetch from')
+  .option('--json', 'Output as JSON')
+  .action(decodeCommand);
+
+program
+  .command('export')
+  .description('Export payment history to CSV or JSON')
+  .option('-o, --output <file>', 'Output file path')
+  .option('-f, --format <format>', 'Output format (csv, json)', 'csv')
+  .option('--from <date>', 'Filter from date (YYYY-MM-DD)')
+  .option('--to <date>', 'Filter to date (YYYY-MM-DD)')
+  .option('-n, --network <network>', 'Filter by network')
+  .option('-s, --status <status>', 'Filter by status (success, failed)')
+  .option('--json', 'Output as JSON')
+  .action(exportCommand);
 
 program.parse();
