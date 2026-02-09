@@ -34,13 +34,16 @@ import { alertCommand } from './commands/alert.js';
 import { registerCommand } from './commands/register.js';
 import { browseCommand } from './commands/browse.js';
 import { starCommand } from './commands/star.js';
+import { compareCommand } from './commands/compare.js';
+import { decodeCommand } from './commands/decode.js';
+import { exportCommand } from './commands/export.js';
 
 const program = new Command();
 
 program
   .name('x402')
   .description('CLI tool for testing and interacting with x402 payment endpoints')
-  .version('0.4.0');
+  .version('0.5.0');
 
 // ========== CORE COMMANDS ==========
 
@@ -316,5 +319,33 @@ program
   .option('-l, --list', 'List starred endpoints')
   .option('--json', 'Output as JSON')
   .action(starCommand);
+
+// ========== COMPARISON & DEBUGGING ==========
+
+program
+  .command('compare <urls...>')
+  .description('Compare payment requirements across multiple x402 endpoints')
+  .option('-t, --timeout <seconds>', 'Timeout per request in seconds', '10')
+  .option('--json', 'Output as JSON')
+  .action(compareCommand);
+
+program
+  .command('decode <input>')
+  .description('Decode and inspect x402 payment headers or requirements')
+  .option('-u, --url', 'Treat input as a URL to fetch from')
+  .option('--json', 'Output as JSON')
+  .action(decodeCommand);
+
+program
+  .command('export')
+  .description('Export payment history to CSV or JSON')
+  .option('-o, --output <file>', 'Output file path')
+  .option('-f, --format <format>', 'Output format (csv, json)', 'csv')
+  .option('--from <date>', 'Filter from date (YYYY-MM-DD)')
+  .option('--to <date>', 'Filter to date (YYYY-MM-DD)')
+  .option('-n, --network <network>', 'Filter by network')
+  .option('-s, --status <status>', 'Filter by status (success, failed)')
+  .option('--json', 'Output as JSON')
+  .action(exportCommand);
 
 program.parse();
